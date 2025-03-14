@@ -46,23 +46,23 @@ Here are the main commands available in the Git Profile Manager:
 
 ```bash
 
-./git-profile
+git-profile
 Git Profile Manager for WSL2
 
 Usage:
-  ./git-profile create <name> <email> <github-user> [directory]  - Creates a new profile
-  ./git-profile add-dir <name> <directory>                      - Adds a directory to a profile
-  ./git-profile switch <name>                                   - Switches to a profile
-  ./git-profile auto                                            - Automatically switches based on the current directory
-  ./git-profile auto debug                                      - Shows debug information during profile switching
-  ./git-profile list                                            - Lists all profiles
-  ./git-profile install                                         - Installs the script to /usr/local/bin and sets up .bashrc
-  ./git-profile help                                            - Shows this help
+    git-profile create <name> <email> <github-user> [directory]  - Creates a new profile
+    git-profile add-dir <name> <directory>                       - Adds a directory to a profile
+    git-profile switch <name>                                    - Switches to a profile
+    git-profile auto                                             - Automatically switches based on the current directory
+    git-profile auto debug                                       - Shows debug information during profile switching
+    git-profile list                                             - Lists all profiles
+    git-profile install                                          - Installs the script to /usr/local/bin and sets up .bashrc
+    git-profile help                                             - Shows this help
 
 Examples:
-  ./git-profile create "Work" "max@company.com" "MaxCompany" "/path/to/projects/work/"
-  ./git-profile add-dir "Work" "/path/to/additional/work/projects/"
-  ./git-profile install
+    git-profile create "Work" "max@company.com" "MaxCompany" "/path/to/projects/work/"
+    git-profile add-dir "Work" "/path/to/additional/work/projects/"
+    git-profile install
 
 ```
 
