@@ -2,6 +2,8 @@
 
 The Git Profile Manager is a powerful tool that helps you manage multiple Git identities (name, email, GitHub username, SSH keys) and automatically switches between them based on your current working directory. This is especially useful for developers who work on different projects requiring different Git credentials.
 
+<img src="https://github.com/inandoutofthebox/Github-Profiles-Script/Logo.jpg">
+
 Execute for install 
 
 ```bash
