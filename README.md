@@ -1,14 +1,24 @@
 # Git Profile Manager for WSL2
 
+#
+
 <div align=center>
 <img src="https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/refs/heads/main/Logo.jpg">
 </div>
 
+#
+
 The Git Profile Manager is a powerful tool that helps you manage multiple Git identities (name, email, GitHub username, SSH keys) and automatically switches between those Github-Accounts based on your current working directory. This is especially useful for developers who work on different projects requiring different Git credentials. This can get quiete an hussle to change back and forth and be breaking Productivity in some cases. This Script easily helps with it. Just configure it once and benefit longterm from it. 
+
+#
 
 What inspired this project? Simply put, I identified a genuine need that wasn't being addressed by existing solutions. When I couldn't find anything that matched my requirements expect an Youtube Video that does it all manual, I decided to create an more Automated solution myself.
 
+#
+
 Fun fact: This project was also created with the help of this script, which demonstrates the practical applicability and effectiveness of the Git Profile Manager in real development environments.
+
+#
 
 Execute for install 
 
@@ -35,12 +45,25 @@ git-profile
 Here are the main commands available in the Git Profile Manager:
 
 ```bash
-git-profile create    [directory]  # Create a new profile
-git-profile add-dir                # Add a directory to a profile
-git-profile switch                 # Manually switch to a profile
-git-profile auto                   # Auto-switch based on current directory
-git-profile list                   # List all available profiles
-git-profile help                   # Show help information
+
+./git-profile
+Git Profile Manager for WSL2
+
+Usage:
+  ./git-profile create <name> <email> <github-user> [directory]  - Creates a new profile
+  ./git-profile add-dir <name> <directory>                      - Adds a directory to a profile
+  ./git-profile switch <name>                                   - Switches to a profile
+  ./git-profile auto                                            - Automatically switches based on the current directory
+  ./git-profile auto debug                                      - Shows debug information during profile switching
+  ./git-profile list                                            - Lists all profiles
+  ./git-profile install                                         - Installs the script to /usr/local/bin and sets up .bashrc
+  ./git-profile help                                            - Shows this help
+
+Examples:
+  ./git-profile create "Work" "max@company.com" "MaxCompany" "/path/to/projects/work/"
+  ./git-profile add-dir "Work" "/path/to/additional/work/projects/"
+  ./git-profile install
+
 ```
 
 ## Usage Examples
