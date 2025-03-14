@@ -6,8 +6,13 @@ Execute for install
 
 ```bash
 
-curl -sL https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/main/git-profile-manager.sh -o git-profile-manager.sh && chmod +x git-profile-manager.sh && ./git-profile-manager.sh install
+curl -sL https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/main/git-profile -o git-profile && chmod +x git-profile && ./git-profile install
 
+```
+
+Use it with just writing: 
+```bash
+git-profile
 ```
 
 ## Features
