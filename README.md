@@ -42,6 +42,11 @@ git-profile
 
 ## Commands
 
+There can be cases of reinitialize the Repository. There forward use:
+```
+git pull --rebase origin main
+```
+
 Here are the main commands available in the Git Profile Manager:
 
 ```bash
@@ -123,6 +128,35 @@ When switching profiles, the tool sets these Git configurations:
 - `user.email`
 - `github.user` 
 - `core.sshCommand` (if an SSH key is configured)
+
+example ~/.git_profiles.json:
+```
+
+{
+  "Work": {
+    "user.name": "Work User",
+    "user.email": "work@example.com",
+    "github.user": "work-username",
+    "ssh.key": "/home/user/.ssh/id_work_ed25519",
+    "directories": [
+      "/path/to/work/projects/company-website/",
+      "/path/to/work/projects/internal-tools/"
+    ]
+  },
+  "Personal": {
+    "user.name": "Personal Projects",
+    "user.email": "personal@example.com",
+    "github.user": "personal-username",
+    "ssh.key": "/home/user/.ssh/id_personal_rsa",
+    "directories": [
+      "/path/to/personal/projects/blog/",
+      "/path/to/personal/projects/open-source/script-tools/"
+    ]
+  }
+}
+
+
+```
 
 ## SSH Key Management
 
