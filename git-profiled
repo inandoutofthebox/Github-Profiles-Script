@@ -1,0 +1,547 @@
+#!/bin/bash
+
+# Git Profile Manager for WSL2 with SSH Key Integration
+# Enables automatic switching between different Git profiles
+
+# Color definitions
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Configuration file
+CONFIG_FILE="$HOME/.git_profiles.json"
+CURRENT_PROFILE=""
+return_key_path=""
+
+# Debug mode (for troubleshooting)
+DEBUG=false
+
+# Enhanced debug function
+function debug() {
+    if [ "$DEBUG" = true ]; then
+        # Output to stderr so it doesn't mix with other outputs
+        echo -e "${YELLOW}DEBUG: $1${NC}" >&2
+    fi
+}
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo -e "${YELLOW}jq is required. Installing...${NC}"
+    sudo apt update && sudo apt install -y jq
+fi
+
+# Initialize profile file
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "{}" > "$CONFIG_FILE"
+fi
+
+# Function to load profiles
+function load_profiles() {
+    if [ -f "$CONFIG_FILE" ]; then
+        cat "$CONFIG_FILE"
+    else
+        echo "{}"
+    fi
+}
+
+# Function to save profiles
+function save_profiles() {
+    echo "$1" > "$CONFIG_FILE"
+}
+
+# SSH key management
+function manage_ssh_keys() {
+    local profile_name="$1"
+    local email="$2"
+    local ssh_key_path=""
+
+    # Check SSH directory
+    if [ ! -d "$HOME/.ssh" ]; then
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
+    fi
+
+    # Check if SSH keys exist
+    if [ -f "$HOME/.ssh/id_ed25519" ] || [ -f "$HOME/.ssh/id_rsa" ]; then
+        echo -e "${GREEN}Existing SSH keys found:${NC}"
+        ls -la $HOME/.ssh/id_*
+
+        read -p "Do you want to create a new SSH key for this profile? (y/n): " create_new_key
+
+        if [[ "$create_new_key" =~ ^[Jj]$ ]]; then
+            create_ssh_key "$profile_name" "$email"
+        else
+            echo -e "${BLUE}Which existing SSH key would you like to use for this profile?${NC}"
+            select key_file in $(ls $HOME/.ssh/id_* | grep -v '.pub$'); do
+                if [ -n "$key_file" ]; then
+                    ssh_key_path="$key_file"
+                    break
+                fi
+            done
+        fi
+    else
+        echo -e "${YELLOW}No SSH keys found.${NC}"
+        read -p "Do you want to create an SSH key for this profile? (y/n): " create_key
+
+        if [[ "$create_key" =~ ^[Jj]$ ]]; then
+            create_ssh_key "$profile_name" "$email"
+        else
+            echo -e "${RED}No SSH key created. The profile will be created without an SSH key.${NC}"
+            return
+        fi
+    fi
+
+    return_key_path="$ssh_key_path"
+}
+
+# Create SSH key
+function create_ssh_key() {
+    local profile_name="$1"
+    local email="$2"
+    local key_path=""
+
+    echo -e "${BLUE}Which key type would you like to generate?${NC}"
+    echo "1) ED25519 (recommended, modern algorithm)"
+    echo "2) RSA (compatible with older systems)"
+    read -p "Choose [1-2]: " key_choice
+
+    local key_filename="id_${profile_name,,}"
+
+    if [ "$key_choice" == "2" ]; then
+        key_path="$HOME/.ssh/${key_filename}_rsa"
+        ssh-keygen -t rsa -b 4096 -C "$email" -f "$key_path"
+    else
+        key_path="$HOME/.ssh/${key_filename}_ed25519"
+        ssh-keygen -t ed25519 -C "$email" -f "$key_path"
+    fi
+
+    chmod 600 "$key_path"
+    chmod 644 "${key_path}.pub"
+
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$key_path"
+
+    echo -e "${GREEN}SSH key successfully created and added to the SSH agent.${NC}"
+    echo -e "${YELLOW}Public key (for adding to GitHub/GitLab):${NC}"
+    cat "${key_path}.pub"
+
+    return_key_path="$key_path"
+}
+
+# Create profile
+function create_profile() {
+    local name="$1"
+    local email="$2"
+    local github_user="$3"
+    local directory="${4:-}"
+    local ssh_key_path=""
+
+    # SSH key management
+    manage_ssh_keys "$name" "$email"
+    ssh_key_path="$return_key_path"
+
+    # Load and create profile
+    local profiles=$(load_profiles)
+
+    # Create new profile with proper initialization of the directories array
+    if [ -n "$ssh_key_path" ]; then
+        if [ -n "$directory" ]; then
+            local new_profile=$(echo "$profiles" | jq --arg name "$name" --arg email "$email" --arg github "$github_user" --arg dir "$directory" --arg ssh "$ssh_key_path" \
+                '.[$name] = {"user.name": $name, "user.email": $email, "github.user": $github, "ssh.key": $ssh, "directories": [$dir]}')
+        else
+            local new_profile=$(echo "$profiles" | jq --arg name "$name" --arg email "$email" --arg github "$github_user" --arg ssh "$ssh_key_path" \
+                '.[$name] = {"user.name": $name, "user.email": $email, "github.user": $github, "ssh.key": $ssh, "directories": []}')
+        fi
+    else
+        if [ -n "$directory" ]; then
+            local new_profile=$(echo "$profiles" | jq --arg name "$name" --arg email "$email" --arg github "$github_user" --arg dir "$directory" \
+                '.[$name] = {"user.name": $name, "user.email": $email, "github.user": $github, "directories": [$dir]}')
+        else
+            local new_profile=$(echo "$profiles" | jq --arg name "$name" --arg email "$email" --arg github "$github_user" \
+                '.[$name] = {"user.name": $name, "user.email": $email, "github.user": $github, "directories": []}')
+        fi
+    fi
+
+    # Save profile
+    save_profiles "$new_profile"
+
+    echo -e "${GREEN}Profile '$name' has been created.${NC}"
+    if [ -n "$directory" ]; then
+        echo -e "${GREEN}Directory '$directory' assigned to profile '$name'.${NC}"
+    fi
+
+    # Switch to the new profile
+    switch_profile "$name"
+    
+    # Check if .bashrc integration is already set up
+    check_bashrc_integration
+}
+
+# Add directory to profile
+function add_directory() {
+    local name="$1"
+    local directory="$2"
+
+    # Absolute path
+    directory=$(realpath "$directory")
+
+    # Load profile
+    local profiles=$(load_profiles)
+
+    # Check if profile exists
+    if ! echo "$profiles" | jq -e --arg name "$name" '.[$name]' > /dev/null; then
+        echo -e "${RED}Error: Profile '$name' not found.${NC}"
+        return 1
+    fi
+
+    # Add directory to profile
+    local updated_profile=""
+
+    if echo "$profiles" | jq -e --arg name "$name" '.[$name] | has("directories")' > /dev/null; then
+        if echo "$profiles" | jq -e --arg name "$name" '.[$name].directories | type == "array"' > /dev/null; then
+            updated_profile=$(echo "$profiles" | jq --arg name "$name" --arg dir "$directory" \
+                '.[$name].directories += [$dir]')
+        else
+            updated_profile=$(echo "$profiles" | jq --arg name "$name" --arg dir "$directory" \
+                '.[$name].directories = [$dir]')
+        fi
+    else
+        updated_profile=$(echo "$profiles" | jq --arg name "$name" --arg dir "$directory" \
+            '.[$name].directories = [$dir]')
+    fi
+
+    # Save profile
+    save_profiles "$updated_profile"
+
+    echo -e "${GREEN}Directory '$directory' added to profile '$name'.${NC}"
+}
+
+# Switch profile
+function switch_profile() {
+    local name="$1"
+    local silent="${2:-false}"
+
+    # Load profile
+    local profiles=$(load_profiles)
+    # Check if profile exists
+    if ! echo "$profiles" | jq -e --arg name "$name" '.[$name]' > /dev/null; then
+        if [ "$silent" != "true" ]; then
+            echo -e "${RED}Error: Profile '$name' not found.${NC}"
+        fi
+        return 1
+    fi
+
+    # Apply Git configurations
+    local user_name=$(echo "$profiles" | jq -r --arg name "$name" '.[$name]["user.name"]')
+    local user_email=$(echo "$profiles" | jq -r --arg name "$name" '.[$name]["user.email"]')
+    local github_user=$(echo "$profiles" | jq -r --arg name "$name" '.[$name]["github.user"]')
+    local ssh_key=$(echo "$profiles" | jq -r --arg name "$name" '.[$name]["ssh.key"] // ""')
+
+    # Set Git configuration locally (in the current directory), not globally
+    if [ -d ".git" ] || git rev-parse --git-dir > /dev/null 2>&1; then
+        # Local Git configuration (in the current repository)
+        git config user.name "$user_name"
+        git config user.email "$user_email"
+        git config github.user "$github_user"
+
+        # SSH key configuration
+        if [ -n "$ssh_key" ] && [ "$ssh_key" != "null" ]; then
+            git config core.sshCommand "ssh -i $ssh_key"
+        fi
+
+        debug "Local Git configuration set for profile '$name'"
+    else
+        # Global Git configuration
+        git config --global user.name "$user_name"
+        git config --global user.email "$user_email"
+        git config --global github.user "$github_user"
+
+        # SSH key configuration
+        if [ -n "$ssh_key" ] && [ "$ssh_key" != "null" ]; then
+            git config --global core.sshCommand "ssh -i $ssh_key"
+        fi
+
+        debug "Global Git configuration set for profile '$name'"
+    fi
+
+    # Set current profile
+    CURRENT_PROFILE="$name"
+
+    if [ "$silent" != "true" ]; then
+        echo -e "${GREEN}Switched to profile '$name'.${NC}"
+        echo -e "${BLUE}Name: ${NC}$user_name"
+        echo -e "${BLUE}Email: ${NC}$user_email"
+        echo -e "${BLUE}GitHub User: ${NC}$github_user"
+        if [ -n "$ssh_key" ] && [ "$ssh_key" != "null" ]; then
+            echo -e "${BLUE}SSH Key: ${NC}$ssh_key"
+        fi
+    fi
+
+    return 0
+}
+
+# Find matching profile for a directory
+function find_profile_for_directory() {
+    local directory=$(realpath "$1")
+    local profiles=$(load_profiles)
+    local best_match=""
+    local best_match_length=0
+
+    debug "Looking for profile for directory: $directory"
+
+    # Loop through all profiles
+    for profile in $(echo "$profiles" | jq -r 'keys[]'); do
+        debug "Checking profile: $profile"
+
+        # Safe access to directories field
+        if echo "$profiles" | jq -e --arg profile "$profile" '.[$profile] | has("directories")' > /dev/null; then
+            if echo "$profiles" | jq -e --arg profile "$profile" '.[$profile].directories | type == "array"' > /dev/null; then
+                # Loop through directories of the profile
+                for dir in $(echo "$profiles" | jq -r --arg profile "$profile" '.[$profile].directories[]'); do
+                    if [ -n "$dir" ] && [[ "$directory/" == "$dir/"* ]]; then
+                        # Calculate length of matching path
+                        local match_length=${#dir}
+                        debug "✓ Match found: $directory is in $dir (length: $match_length)"
+
+                        # Find best match (longest matching path)
+                        if [ $match_length -gt $best_match_length ]; then
+                            best_match="$profile"
+                            best_match_length=$match_length
+                            debug "New best match: $best_match (length: $best_match_length)"
+                        fi
+                    else
+                        debug "✗ No match: $directory is not in $dir"
+                    fi
+                done
+            fi
+        fi
+    done
+
+    debug "Final best match: $best_match"
+    echo "$best_match"
+
+    # Return: success if a profile was found
+    if [ -n "$best_match" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Automatically switch profile
+function auto_switch_profile() {
+    local current_dir=$(pwd)
+
+    # Check if we're in a Git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        debug "No Git repository found in the current directory"
+        echo -e "${YELLOW}No Git repository found in the current directory.${NC}"
+        return 1
+    fi
+
+    local profile=$(find_profile_for_directory "$current_dir")
+    debug "Found profile: $profile"
+
+    if [ -n "$profile" ]; then
+        if [ "$profile" != "$CURRENT_PROFILE" ]; then
+            switch_profile "$profile" "false"  # Silent: false to provide feedback
+            echo -e "${GREEN}Automatically switched to profile '$profile' for directory '$current_dir'.${NC}"
+        else
+            echo -e "${BLUE}Profile '$profile' is already active.${NC}"
+        fi
+        return 0
+    else
+        echo -e "${YELLOW}No matching profile found for directory '$current_dir'.${NC}"
+        return 1
+    fi
+}
+
+# List profiles
+function list_profiles() {
+    local profiles=$(load_profiles)
+
+    # Check if profiles exist
+    local profile_count=$(echo "$profiles" | jq 'keys | length')
+    if [ -z "$profile_count" ] || [ "$profile_count" -eq 0 ]; then
+        echo -e "${YELLOW}No profiles available.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}Available profiles:${NC}"
+    for profile in $(echo "$profiles" | jq -r 'keys[]'); do
+        echo ""
+        echo -e "  ${GREEN}$profile:${NC}"
+
+        # Values with defaults
+        local name=$(echo "$profiles" | jq -r --arg p "$profile" '.[$p]["user.name"] // "Not specified"')
+        local email=$(echo "$profiles" | jq -r --arg p "$profile" '.[$p]["user.email"] // "Not specified"')
+        local github=$(echo "$profiles" | jq -r --arg p "$profile" '.[$p]["github.user"] // "Not specified"')
+
+        echo -e "    ${BLUE}Name:${NC} $name"
+        echo -e "    ${BLUE}Email:${NC} $email"
+        echo -e "    ${BLUE}GitHub User:${NC} $github"
+
+        # Show SSH key
+        local ssh_key=$(echo "$profiles" | jq -r --arg p "$profile" '.[$p]["ssh.key"] // ""')
+        if [ -n "$ssh_key" ] && [ "$ssh_key" != "null" ]; then
+            echo -e "    ${BLUE}SSH Key:${NC} $ssh_key"
+        fi
+
+        echo -e "    ${BLUE}Directories:${NC}"
+
+        # Show directories
+        if echo "$profiles" | jq -e --arg p "$profile" '.[$p] | has("directories")' > /dev/null; then
+            if echo "$profiles" | jq -e --arg p "$profile" '.[$p].directories | type == "array"' > /dev/null; then
+                local dir_count=$(echo "$profiles" | jq --arg p "$profile" '.[$p].directories | length')
+                if [ "$dir_count" -gt 0 ]; then
+                    for dir in $(echo "$profiles" | jq -r --arg p "$profile" '.[$p].directories[]'); do
+                        if [ -n "$dir" ] && [ "$dir" != "null" ]; then
+                            echo -e "      - $dir"
+                        fi
+                    done
+                else
+                    echo -e "      ${YELLOW}No directories defined.${NC}"
+                fi
+            else
+                echo -e "      ${YELLOW}No directories defined.${NC}"
+            fi
+        else
+            echo -e "      ${YELLOW}No directories defined.${NC}"
+        fi
+    done
+}
+
+# Function for self-installation of the script
+function setup_self_installation() {
+    echo -e "${BLUE}Starting self-installation of Git Profile Manager...${NC}"
+    
+    # 1. Copy the script to /usr/local/bin/git-profile
+    local script_path=$(realpath "$0")
+    local target_path="/usr/local/bin/git-profile"
+    
+    if [ "$script_path" != "$target_path" ]; then
+        echo -e "${YELLOW}Copying script to $target_path...${NC}"
+        sudo cp "$script_path" "$target_path"
+        sudo chmod +x "$target_path"
+        echo -e "${GREEN}Script has been copied to $target_path and made executable.${NC}"
+    else
+        echo -e "${GREEN}Script is already in the target path.${NC}"
+    fi
+    
+    # Check .bashrc integration and add it if necessary
+    check_bashrc_integration
+    
+    echo -e "${GREEN}Installation completed! Git Profile Manager is now ready to use.${NC}"
+}
+
+# Check and insert .bashrc integration
+function check_bashrc_integration() {
+    local bashrc_file="$HOME/.bashrc"
+    local integration_marker="# Automatically switch Git profiles"
+    
+    # Check if the integration is already in .bashrc
+    if grep -q "$integration_marker" "$bashrc_file"; then
+        echo -e "${GREEN}Git Profile Manager integration is already set up in your .bashrc.${NC}"
+    else
+        echo -e "${YELLOW}Git Profile Manager integration is not yet set up in your .bashrc.${NC}"
+        read -p "Would you like to add automatic profile switching to your .bashrc? (y/n): " add_integration
+        
+        if [[ "$add_integration" =~ ^[Yy]$ ]]; then
+            # Add setup to .bashrc
+            cat >> "$bashrc_file" << EOL
+
+$integration_marker
+cd() {
+    builtin cd "\$@"
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        git-profile auto > /dev/null
+    fi
+}
+
+# Initially run when shell starts
+if git rev-parse --git-dir > /dev/null 2>&1; then
+    git-profile auto > /dev/null
+fi
+EOL
+            echo -e "${GREEN}Git Profile Manager integration has been added to your .bashrc.${NC}"
+            echo -e "${BLUE}Run 'source ~/.bashrc' to activate the changes.${NC}"
+            
+            # Automatically run source ~/.bashrc
+            echo -e "${YELLOW}Reloading .bashrc...${NC}"
+            source "$bashrc_file"
+            echo -e "${GREEN}.bashrc has been reloaded.${NC}"
+        else
+            echo -e "${YELLOW}Integration not added. You can manually run 'git-profile auto'.${NC}"
+        fi
+    fi
+}
+
+# Show help
+function show_help() {
+    echo -e "${BLUE}Git Profile Manager for WSL2${NC}"
+    echo ""
+    echo -e "Usage:"
+    echo -e "  $0 ${GREEN}create${NC} <name> <email> <github-user> [directory]  - Creates a new profile"
+    echo -e "  $0 ${GREEN}add-dir${NC} <name> <directory>                      - Adds a directory to a profile"
+    echo -e "  $0 ${GREEN}switch${NC} <name>                                   - Switches to a profile"
+    echo -e "  $0 ${GREEN}auto${NC}                                            - Automatically switches based on current directory"
+    echo -e "  $0 ${GREEN}auto debug${NC}                                      - Shows debug information during profile switching"
+    echo -e "  $0 ${GREEN}list${NC}                                            - Lists all profiles"
+    echo -e "  $0 ${GREEN}install${NC}                                         - Installs the script to /usr/local/bin and sets up .bashrc"
+    echo -e "  $0 ${GREEN}help${NC}                                            - Shows this help"
+    echo ""
+    echo -e "Examples:"
+    echo -e "  $0 create \"Work\" \"max@company.com\" \"MaxCompany\" \"/path/to/projects/work/\""
+    echo -e "  $0 add-dir \"Work\" \"/path/to/more/work-projects/\""
+    echo -e "  $0 install"
+}
+
+# Main function
+case "$1" in
+    create)
+        if [ $# -lt 4 ]; then
+            echo -e "${RED}Error: Too few arguments.${NC}"
+            echo -e "Usage: $0 create <name> <email> <github-user> [directory]"
+            exit 1
+        fi
+        create_profile "$2" "$3" "$4" "${5:-}"
+        ;;
+    add-dir)
+        if [ $# -ne 3 ]; then
+            echo -e "${RED}Error: Wrong number of arguments.${NC}"
+            echo -e "Usage: $0 add-dir <name> <directory>"
+            exit 1
+        fi
+        add_directory "$2" "$3"
+        ;;
+    switch)
+        if [ $# -ne 2 ]; then
+            echo -e "${RED}Error: Wrong number of arguments.${NC}"
+            echo -e "Usage: $0 switch <name>"
+            exit 1
+        fi
+        switch_profile "$2"
+        ;;
+    auto)
+        # Activate debug mode for the auto command
+        if [ "$2" = "debug" ]; then
+            DEBUG=true
+            echo -e "${YELLOW}Debug mode activated${NC}"
+        fi
+        auto_switch_profile
+        ;;
+    list)
+        list_profiles
+        ;;
+    install)
+        # Run self-installation
+        setup_self_installation
+        ;;
+    help|*)
+        show_help
+        ;;
+esac
+
+exit 0
