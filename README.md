@@ -1,181 +1,166 @@
-# Git Profile Manager for WSL2
-
-#
-
-<div align=center>
+<div align="center">
 <img src="https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/refs/heads/main/Logo.jpg">
 </div>
 
-#
+**Git Profile Manager** is an advanced Bash script that lets you manage multiple Git identities (name, email, GitHub username, SSH key) safely and switch between them automatically or manually—based on the directory you are working in. It features interactive SSH key management, debugging, full backup/restore, seamless WSL2/Linux integration, and autoswitch via `.bashrc`.
 
-The Git Profile Manager is a powerful tool that helps you manage multiple Git identities (name, email, GitHub username, SSH keys) and automatically switches between those Github-Accounts based on your current working directory. This is especially useful for developers who work on different projects requiring different Git credentials. This can get quiete an hussle to change back and forth and be breaking Productivity in some cases. This Script easily helps with it. Just configure it once and benefit longterm from it. 
+---
 
-#
+## Why?
 
-What inspired this project? Simply put, I identified a genuine need that wasn't being addressed by existing solutions. When I couldn't find anything that matched my requirements expect an Youtube Video that does it all manual, I decided to create an more Automated solution myself.
+If you work with different GitHub accounts (business, private, open source), keeping your profiles in sync quickly becomes a hassle. Most tutorials are manual and error-prone. **Git Profile Manager** solves this elegantly and securely—install once, benefit forever.  
+> This whole repository is managed with this tool, so it’s always field-tested.
 
-#
+---
 
-Fun fact: This project was also created with the help of this script, which demonstrates the practical applicability and effectiveness of the Git Profile Manager in real development environments.
-
-#
-
-Execute for install 
-
-```bash
-
-curl -sL https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/main/git-profile -o git-profile && chmod +x git-profile && ./git-profile install
+## Installation
 
 ```
 
-Use it with just writing: 
-```bash
-git-profile
+curl -sL https://raw.githubusercontent.com/inandoutofthebox/Github-Profiles-Script/main/git-profile -o git-profile
+chmod +x git-profile
+./git-profile install
+
 ```
+
+The installation sets up the script in `/usr/local/bin/git-profile` and integrates in your `.bashrc` if you want auto profile switching.
+
+---
 
 ## Features
 
-- **Multiple Profiles**: Manage different Git identities for work, personal, and other projects
-- **SSH Key Management**: Easy integration and management of SSH keys for each profile
-- **Automatic Profile Switching**: Changes your Git configuration automatically when you switch directories
-- **WSL2 Optimized**: Specifically designed for Windows Subsystem (Tested with Ubunt 24.04 LTS) for Linux 2 environments
+- **Multiple Profiles:** Name, email, GitHub user, SSH key, directories, created timestamp per profile.
+- **SSH Key Wizard:** Create a new SSH key (ED25519, RSA4096/2048) or select from existing, all in an interactive menu. Keys are automatically loaded into `ssh-agent`.
+- **Auto or Manual Switching:** Automatically assigns the right profile (Git config + SSH key) as you `cd` into a project directory.
+- **Interactive & Secure:** All console inputs are validated and color-coded. Clear success, warning, and error messages.
+- **Profile Management:** List, view, backup, restore, delete, get status, and see config path at any time.
+- **Logging:** All actions and debug output go to `~/.git_profile_manager.log`.
+- **Advanced Bashrc Integration:** Optional, overwrites `cd` to call `git-profile auto` after every directory change.
+- **WSL2 and Linux Native:** Tested on Ubuntu 24.04 under WSL2, but works in any Unix-like shell with Bash and `jq`.
 
-## Commands
+---
 
-There can be cases of reinitialize the Repository. There forward use:
-```
-git pull --rebase origin main
-```
+## Usage
 
-Here are the main commands available in the Git Profile Manager:
-
-```bash
-
-git-profile
-Git Profile Manager for WSL2
-
-Usage:
-    git-profile create <name> <email> <github-user> [directory]  - Creates a new profile
-    git-profile add-dir <name> <directory>                       - Adds a directory to a profile
-    git-profile switch <name>                                    - Switches to a profile
-    git-profile auto                                             - Automatically switches based on the current directory
-    git-profile auto debug                                       - Shows debug information during profile switching
-    git-profile list                                             - Lists all profiles
-    git-profile install                                          - Installs the script to /usr/local/bin and sets up .bashrc
-    git-profile help                                             - Shows this help
-
-Examples:
-    git-profile create "Work" "max@company.com" "MaxCompany" "/path/to/projects/work/"
-    git-profile add-dir "Work" "/path/to/additional/work/projects/"
-    git-profile install
+### Main Commands
 
 ```
 
-## Usage Examples
+git-profile create <name> <email> <github-user> [directory]   \# Create a profile and (optionally) assign a directory
+git-profile add-dir <name> <directory>                        \# Link more directories to a profile
+git-profile switch <name>                                     \# Switch manually to a profile
+git-profile auto                                              \# Auto-switch profile based on your current directory
+git-profile auto debug                                        \# Like above, but with detailed debug output
+git-profile list                                              \# List all profiles with their information
+git-profile delete <name>                                     \# Delete a profile (with confirmation)
+git-profile status                                            \# View current status, active profile \& git config
+git-profile config                                            \# Show script, log, and config locations
+git-profile backup                                            \# Back up your current profiles configuration
+git-profile restore [backupfile]                              \# Restore a backup
+git-profile install                                           \# Install/repair setup (Bashrc, etc.)
+git-profile version                                           \# Show script version
+git-profile help                                              \# Command overview and usage
 
-### Creating a Profile
-
-To create a new profile for work projects:
-
-```bash
-git-profile create "Work" "your.email@company.com" "YourGitHubUser" "/path/to/work/projects"
 ```
 
-This command will:
-1. Ask if you want to create or use an existing SSH key
-2. Create a profile named "Work" with your work email and GitHub username
-3. Associate the specified directory with this profile
+### Example Workflow
 
-### Adding Directories to a Profile
-
-To add another directory to an existing profile:
-
-```bash
-git-profile add-dir "Work" "/path/to/another/work/project"
 ```
 
-### Switching Profiles Manually
+git-profile create "Business" "office@company.com" "AcmeDev" "~/projects/company"
+git-profile add-dir "Business" "~/other/company-stuff"
+git-profile create "Private" "jack@home.org" "jackhack" "~/code/private"
+cd ~/projects/company          \# Auto-switches to Business profile!
+git-profile list               \# See all saved profiles and their settings
+git-profile status             \# Check which profile is currently active
 
-To manually switch to a specific profile:
-
-```bash
-git-profile switch "Personal"
 ```
 
-### Automatic Profile Switching
+---
 
-The tool automatically switches your Git profile when you change directories. Simply:
+## Bashrc Integration
 
-```bash
-cd /path/to/work/projects
-# Your Git configuration will automatically switch to the "Work" profile
+When you run `git-profile install`, you’ll be offered to enable autoswitch:
+
+- `cd` is wrapped so every directory change triggers `git-profile auto`
+- On shell start you’ll get the right profile if you’re inside a mapped directory
+
+To activate new changes:
 ```
 
-### Listing All Profiles
+source ~/.bashrc
 
-To see all your configured profiles:
-
-```bash
-git-profile list
 ```
 
-## How It Works
+---
 
-The Git Profile Manager stores all profiles in a JSON file at `~/.git_profiles.json`. When you change directories, it checks if the current directory is associated with a known profile and automatically switches to that profile.
+## Data Storage & Example
 
-When switching profiles, the tool sets these Git configurations:
-- `user.name`
-- `user.email`
-- `github.user` 
-- `core.sshCommand` (if an SSH key is configured)
+All your config is stored in these files:
+- **Profiles:** `~/.git_profiles.json`
+- **Logs:**     `~/.git_profile_manager.log`
+- **SSH Keys:** Saved wherever you want under `~/.ssh/`
 
-example ~/.git_profiles.json:
+Example `~/.git_profiles.json`:
+
 ```
 
 {
-  "Work": {
-    "user.name": "Work User",
-    "user.email": "work@example.com",
-    "github.user": "work-username",
-    "ssh.key": "/home/user/.ssh/id_work_ed25519",
-    "directories": [
-      "/path/to/work/projects/company-website/",
-      "/path/to/work/projects/internal-tools/"
-    ]
-  },
-  "Personal": {
-    "user.name": "Personal Projects",
-    "user.email": "personal@example.com",
-    "github.user": "personal-username",
-    "ssh.key": "/home/user/.ssh/id_personal_rsa",
-    "directories": [
-      "/path/to/personal/projects/blog/",
-      "/path/to/personal/projects/open-source/script-tools/"
-    ]
-  }
+"Business": {
+"user.name": "Acme Dev",
+"user.email": "office@company.com",
+"github.user": "AcmeDev",
+"ssh.key": "/home/youruser/.ssh/id_business_ed25519",
+"directories": [
+"/home/youruser/projects/company",
+"/home/youruser/other/company-stuff"
+],
+"created": "2025-08-05 13:33:00"
+},
+"Private": {
+"user.name": "Jack User",
+"user.email": "jack@home.org",
+"github.user": "jackhack",
+"ssh.key": "/home/youruser/.ssh/id_private_rsa4096",
+"directories": ["/home/youruser/code/private"],
+"created": "2025-08-05 13:35:12"
+}
 }
 
-
 ```
+
+---
 
 ## SSH Key Management
 
-The tool helps you manage SSH keys for different accounts:
+- **Create:** Generates new keys per profile (ED25519/RSA, freely selectable).
+- **Reuse:** Select from any existing keys in `~/.ssh/` interactively.
+- **Agent:** Keys are added to running `ssh-agent` automatically (if available).
+- **Clipboard:** Public key copied to clipboard on creation (if `xclip` or `pbcopy` is installed).
 
-1. You can create a new SSH key for each profile
-2. You can use existing SSH keys for profiles
-3. The tool automatically configures Git to use the correct SSH key for each profile
+---
 
 ## Troubleshooting
 
-If automatic profile switching isn't working, ensure:
-1. The current directory is a Git repository (`git init` or cloned)
-2. The directory is properly associated with a profile
-3. You have the appropriate configuration in your `.bashrc` file
+- The current directory must be a Git repo (`git init` or clone)
+- Make sure you assigned the directory to a profile
+- Install `jq` with `apt install jq` if missing
+- If autoswitch doesn’t work, check your `.bashrc` and rerun `git-profile install`
+- To debug:
+    ```
+    git-profile auto debug
+    ```
 
-For more detailed debugging information, use:
-```bash
-git-profile auto debug
-```
+---
 
-This comprehensive tool makes working with multiple Git accounts seamless and eliminates the hassle of manually changing your Git configuration when switching between projects.
+## Contribution
+
+Open source & PRs/feedback warmly welcome!
+
+---
+
+## License
+
+MIT License
+
+---
